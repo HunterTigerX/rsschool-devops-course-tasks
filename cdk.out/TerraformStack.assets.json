@@ -1,0 +1,21 @@
+{
+  "version": "44.0.0",
+  "files": {
+    "ea0338fcba3aa9145ffc5864abd7a9ea4ccff0132f9e7ad880ca2527d9a84385": {
+      "displayName": "TerraformStack Template",
+      "source": {
+        "path": "TerraformStack.template.json",
+        "packaging": "file"
+      },
+      "destinations": {
+        "current_account-eu-west-1": {
+          "bucketName": "cdk-hnb659fds-assets-${AWS::AccountId}-eu-west-1",
+          "objectKey": "ea0338fcba3aa9145ffc5864abd7a9ea4ccff0132f9e7ad880ca2527d9a84385.json",
+          "region": "eu-west-1",
+          "assumeRoleArn": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cdk-hnb659fds-file-publishing-role-${AWS::AccountId}-eu-west-1"
+        }
+      }
+    }
+  },
+  "dockerImages": {}
+}
