@@ -1,26 +1,21 @@
 name: Terraform CI/CD
 
-# Controls when the workflow will run
 on:
-# Triggers the workflow on push or pull request events but only for the "main" br
   pull_request:
     branches: [ task_1 ]
   push:
     branches: [ task_1 ]
-
-  # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
 
 permissions:
-  id-token: write   # Required for OIDC authentication
-  contents: read    # Required for actions/checkout
+  id-token: write
+  contents: read
 
 env:
-  TF_VERSION: '1.12.2'  # Specify desired Terraform version
-  AWS_REGION: 'eu-west-1'  # AWS region
-  TF_ROLE_ARN: 'arn:aws:iam::218585377303:role/GithubActionsRole ' # IAM role ARN
+  TF_VERSION: '1.12.2'
+  AWS_REGION: 'eu-west-1'
+  TF_ROLE_ARN: 'arn:aws:iam::218585377303:role/GithubActionsRole' # Removed trailing space
 
-# A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
   terraform-check:
     name: 'Terraform Format'
@@ -35,14 +30,15 @@ jobs:
       with:
         terraform_version: ${{ env.TF_VERSION }}
         
+    # Skip backend init for format/validate checks
+    - name: Terraform Init (skip backend)
+      id: init
+      run: terraform init -backend=false -input=false
+      
     - name: Terraform Format Check
       id: fmt
       run: terraform fmt -check -recursive
       continue-on-error: true
-      
-    - name: Terraform Init
-      id: init
-      run: terraform init -input=false
       
     - name: Terraform Validate
       id: validate
@@ -66,6 +62,7 @@ jobs:
             repo: context.repo.repo,
             body: output
           })
+
   terraform-plan:
     name: 'Terraform Plan'
     needs: terraform-check
@@ -99,7 +96,7 @@ jobs:
         case $PLAN_EXIT_CODE in
             0)
               echo "No changes detected"
-              touch tfplan  # Создаём пустой файл, чтобы артефакт загрузился
+              touch tfplan
               ;;
             1)
               echo "Error during plan"
@@ -143,6 +140,7 @@ jobs:
             repo: context.repo.repo,
             body: output
           })
+
   terraform-apply:
     name: 'Terraform Apply'
     needs: terraform-plan
