@@ -7,10 +7,10 @@ terraform {
   }
 
   backend "s3" {
-    bucket         = var.bucket_name
+    bucket         = "huntertigerx3-terraform-state-bucket"
     key            = "global/s3/terraform.tfstate"
-    region         = var.aws_region
-    dynamodb_table = var.dynamodb_table_name
+    region         = "eu-west-1"
+    dynamodb_table = "terraform-state-locks"
     encrypt        = true
   }
 }
