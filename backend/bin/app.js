@@ -1,5 +1,5 @@
 const cdk = require("aws-cdk-lib");
-const { TerraformStack } = require("../lib/stack");
+const { TerraformStack } = require("../../lib/stack");
 
 const app = new cdk.App();
 new TerraformStack(app, "TerraformStack", {
