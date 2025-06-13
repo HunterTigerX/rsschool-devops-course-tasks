@@ -14,11 +14,11 @@ permissions:
 env:
   TF_VERSION: '1.12.2'
   AWS_REGION: 'eu-west-1'
-  TF_ROLE_ARN: 'arn:aws:iam::218585377303:role/GithubActionsRole' # Removed trailing space
+  TF_ROLE_ARN: 'arn:aws:iam::218585377303:role/GithubActionsRole' 
 
 jobs:
   terraform-check:
-    name: 'Terraform Format'
+    name: 'Terraform Format & Validate'
     runs-on: ubuntu-latest
     
     steps:
@@ -144,7 +144,6 @@ jobs:
   terraform-apply:
     name: 'Terraform Apply'
     needs: terraform-plan
-    if: github.ref == 'refs/heads/task_1' && github.event_name == 'push'
     runs-on: ubuntu-latest
     
     steps:
@@ -162,8 +161,12 @@ jobs:
       with:
         aws-region: ${{ env.AWS_REGION }}
         role-to-assume: ${{ env.TF_ROLE_ARN }}
-        role-session-name: GitHubActions-${{ github.run_id }}
-        
+        role-session-name: GitHubActions-${{ github.run_id }} 
+
+    - name: Terraform Init
+      id: init
+      run: terraform init -input=false
+
     - name: Download Plan Artifact
       uses: actions/download-artifact@v4
       with:
