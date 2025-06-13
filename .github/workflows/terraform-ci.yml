@@ -18,7 +18,7 @@ env:
 
 jobs:
   terraform-check:
-    name: 'Terraform Format & Validate'
+    name: 'Terraform Format'
     runs-on: ubuntu-latest
     
     steps:
