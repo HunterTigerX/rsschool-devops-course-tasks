@@ -6,7 +6,7 @@ resource "aws_s3_bucket" "terraform_state_bucket" {
 resource "aws_s3_bucket_versioning" "terraform_state_bucket" {
   bucket = aws_s3_bucket.terraform_state_bucket.id
   versioning_configuration {
-    status = var.enable_bucket_versioning ? "Enabled" : "Disabled"
+    status = var.enable_bucket_versioning? "Enabled" : "Disabled"
   }
 }
 
@@ -35,20 +35,18 @@ resource "aws_s3_bucket_policy" "terraform_state_bucket_policy" {
     Version = "2012-10-17",
     Statement = [
       {
-        Effect = "Allow",
-        Principal = {
-          AWS = "arn:aws:iam::${var.aws_account_id}:root"
-        },
-        Action = [
-          "s3:ListBucket",
-          "s3:GetObject",
-          "s3:PutObject",
-          "s3:DeleteObject",
-        ],
+        Effect = "Deny",
+        Principal = "*",
+        Action = "s3:*",
         Resource = [
           aws_s3_bucket.terraform_state_bucket.arn,
           "${aws_s3_bucket.terraform_state_bucket.arn}/*",
         ],
+        Condition = {
+          Bool = {
+            "aws:SecureTransport" = "false"
+          }
+        }
       },
     ],
   })
