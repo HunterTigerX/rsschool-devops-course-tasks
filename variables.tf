@@ -1,57 +1,39 @@
 variable "aws_region" {
-  description = "AWS region"
+  description = "AWS регион для развертывания"
   type        = string
   default     = "eu-west-1"
 }
 
-variable "bucket_name" {
-  description = "Name for the Terraform state S3 bucket"
+variable "my_ip" {
+  description = "Ваш публичный IP адрес для доступа к бастиону"
   type        = string
-  default     = "huntertigerx3-terraform-state-bucket"
+  sensitive   = true
 }
 
-variable "dynamodb_table_name" {
-  description = "Name for the DynamoDB lock table"
+variable "github_owner" {
+  description = "Имя вашего пользователя или организации на GitHub"
   type        = string
-  default     = "terraform-state-locks"
 }
 
-variable "aws_account_id" {
-  description = "AWS account ID for bucket policy"
+variable "key_name" {
+  description = "Имя существующей пары ключей EC2 для доступа к инстансам"
   type        = string
-  default     = "218585377303"
+  default     = "bastion-key"
 }
 
 variable "common_tags" {
-  description = "Common tags for all resources"
+  description = "Общие теги для всех ресурсов"
   type        = map(string)
   default = {
-    Environment = "Dev"
-    Terraform   = "true"
+    Project   = "K3s-Cluster-Task"
+    Terraform = "true"
+    ManagedBy = "Gemini"
   }
 }
 
-variable "enable_bucket_versioning" {
-  description = "Enable versioning for S3 bucket"
-  type        = bool
-  default     = true
-}
-
-variable "sse_algorithm" {
-  description = "Server-side encryption algorithm"
-  type        = string
-  default     = "AES256"
-}
-
-variable "vpc_cidr" {
-  description = "CIDR block for the VPC"
-  type        = string
-  default     = "10.0.0.0/16"
-}
-
 variable "public_subnets" {
-  description = "Map of public subnets with their CIDR blocks and AZs"
-  type        = map(object({
+  description = "Публичные подсети"
+  type = map(object({
     cidr = string
     az   = string
   }))
@@ -68,18 +50,18 @@ variable "public_subnets" {
 }
 
 variable "private_subnets" {
-  description = "Map of private subnets with their CIDR blocks and AZs"
-  type        = map(object({
+  description = "Приватные подсети"
+  type = map(object({
     cidr = string
     az   = string
   }))
   default = {
     "private-subnet-1" = {
-      cidr = "10.0.3.0/24"
+      cidr = "10.0.101.0/24"
       az   = "eu-west-1a"
     }
     "private-subnet-2" = {
-      cidr = "10.0.4.0/24"
+      cidr = "10.0.102.0/24"
       az   = "eu-west-1b"
     }
   }
