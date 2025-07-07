@@ -98,23 +98,29 @@ jobs:
     - name: Terraform Plan
       id: plan
       run: |
+        # Disable exit on error for the terraform plan command itself
+        set +e 
         terraform plan -no-color -input=false -out=tfplan -detailed-exitcode
         PLAN_EXIT_CODE=$?
+        # Re-enable exit on error for subsequent commands
+        set -e 
+        
         case $PLAN_EXIT_CODE in
             0)
               echo "No changes detected"
               echo "plan_result=no_changes" >> $GITHUB_OUTPUT
+              exit 0 # Explicitly exit with 0 for success
               ;;
             1)
               echo "Error during plan"
-              exit 1
+              exit 1 # Exit with 1 for actual errors
               ;;
             2)
               echo "Changes detected"
               echo "plan_result=changes" >> $GITHUB_OUTPUT
+              exit 0 # Explicitly exit with 0 for success (changes detected)
               ;;
         esac
-      continue-on-error: false
       
     - name: Upload Plan Artifact
       uses: actions/upload-artifact@v4
