@@ -5,7 +5,7 @@ resource "aws_iam_openid_connect_provider" "github" {
     "sts.amazonaws.com",
   ]
 
-  thumbprint_list = ["6938fd4d98bab03faadb97b34396831e3780aea1"]
+  thumbprint_list = ["1c58a3a8518e8759bf075b76b750d4f2df264fcd"]
 }
 
 resource "aws_iam_role" "github_actions" {
@@ -20,13 +20,13 @@ resource "aws_iam_role" "github_actions" {
         },
         Action = "sts:AssumeRoleWithWebIdentity",
         Condition = {
-          StringEquals = {
-            "token.actions.githubusercontent.com:aud" : "sts.amazonaws.com"
-          },
           StringLike = {
+            "token.actions.githubusercontent.com:aud" : "sts.amazonaws.com",
             "token.actions.githubusercontent.com:sub" : "repo:${var.github_owner}/*"
           },
-          "token.actions.githubusercontent.com:iss" : "https://token.actions.githubusercontent.com" // Add this line
+          StringEquals = {
+            "token.actions.githubusercontent.com:iss" : "https://token.actions.githubusercontent.com"
+          }
         }
       }
     ]
