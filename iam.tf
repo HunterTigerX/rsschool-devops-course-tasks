@@ -24,8 +24,9 @@ resource "aws_iam_role" "github_actions" {
             "token.actions.githubusercontent.com:aud" : "sts.amazonaws.com"
           },
           StringLike = {
-            "token.actions.githubusercontent.com:sub" : "repo:${var.github_owner}/rsschool-devops-course-tasks:*"
-          }
+            "token.actions.githubusercontent.com:sub" : "repo:${var.github_owner}/*"
+          },
+          "token.actions.githubusercontent.com:iss" : "https://token.actions.githubusercontent.com" // Add this line
         }
       }
     ]
