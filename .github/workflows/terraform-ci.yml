@@ -78,6 +78,13 @@ jobs:
         terraform_version: ${{ env.TF_VERSION }}
         terraform_wrapper: false
         
+    - name: Debug OIDC Token
+      run: |
+        echo "Repository: ${{ github.repository }}"
+        echo "Ref: ${{ github.ref }}"
+        echo "Event: ${{ github.event_name }}"
+        echo "Actor: ${{ github.actor }}"
+        
     - name: Configure AWS Credentials
       uses: aws-actions/configure-aws-credentials@v4
       with:
@@ -96,7 +103,7 @@ jobs:
         case $PLAN_EXIT_CODE in
             0)
               echo "No changes detected"
-              touch tfplan
+              echo "plan_result=no_changes" >> $GITHUB_OUTPUT
               ;;
             1)
               echo "Error during plan"
@@ -104,6 +111,7 @@ jobs:
               ;;
             2)
               echo "Changes detected"
+              echo "plan_result=changes" >> $GITHUB_OUTPUT
               ;;
         esac
       continue-on-error: false
