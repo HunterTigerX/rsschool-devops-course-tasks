@@ -2,9 +2,9 @@ name: Terraform CI/CD
 
 on:
   pull_request:
-    branches: [ task_4 ]
+    branches: [ task_1 ]
   push:
-    branches: [ task_4 ]
+    branches: [ task_1 ]
   workflow_dispatch:
 
 permissions:
@@ -14,7 +14,7 @@ permissions:
 env:
   TF_VERSION: '1.12.2'
   AWS_REGION: 'eu-west-1'
-  TF_ROLE_ARN: 'arn:aws:iam::155261241825:role/GithubActionsRole' 
+  TF_ROLE_ARN: 'arn:aws:iam::218585377303:role/GithubActionsRole' 
 
 jobs:
   terraform-check:
@@ -178,87 +178,3 @@ jobs:
     - name: Update GitHub Status
       if: success()
       run: echo "Terraform apply completed successfully!"
-
-  # Новый job для развертывания Jenkins
-  deploy-jenkins:
-    name: 'Deploy Jenkins to Kubernetes'
-    needs: terraform-apply  # Зависит от успешного применения Terraform
-    runs-on: ubuntu-latest
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    - name: Install kubectl
-      uses: azure/setup-kubectl@v3
-      with:
-        version: 'latest'
-        
-    - name: Install Helm
-      uses: azure/setup-helm@v3
-      with:
-        version: ${{ env.HELM_VERSION }}
-        
-    - name: Configure AWS Credentials
-      uses: aws-actions/configure-aws-credentials@v4
-      with:
-        aws-region: ${{ env.AWS_REGION }}
-        role-to-assume: ${{ env.TF_ROLE_ARN }}
-        role-session-name: GitHubActions-Jenkins-${{ github.run_id }}
-        
-    - name: Configure kubeconfig
-      run: |
-        aws eks --region ${{ env.AWS_REGION }} update-kubeconfig \
-          --name your-cluster-name
-        
-    - name: Create Jenkins namespace
-      run: kubectl create namespace ${{ env.K8S_NAMESPACE }} --dry-run=client -o yaml | kubectl apply -f -
-      
-    - name: Add Jenkins Helm repo
-      run: |
-        helm repo add jenkins https://charts.jenkins.io
-        helm repo update
-        
-    - name: Deploy Jenkins with Helm
-      run: |
-        helm upgrade --install jenkins jenkins/jenkins \
-          --namespace ${{ env.K8S_NAMESPACE }} \
-          --set controller.installPlugins=false \
-          --set controller.JCasC.enabled=true \
-          --set controller.JCasC.configScripts.job-demo="""
-          jobs:
-          - script: >
-              pipeline {
-                agent any
-                stages {
-                  stage('Hello') {
-                    steps {
-                      echo 'Hello World'
-                    }
-                  }
-                }
-              }
-          """ \
-          --set persistence.enabled=true \
-          --set persistence.size=10Gi \
-          --wait
-          
-    - name: Get Jenkins admin password
-      run: |
-        echo "Jenkins admin password:"
-        kubectl get secret --namespace ${{ env.K8S_NAMESPACE }} jenkins -o jsonpath="{.data.jenkins-admin-password}" | base64 --decode
-        echo ""
-        
-    - name: Expose Jenkins service
-      run: |
-        kubectl expose svc jenkins \
-          --namespace ${{ env.K8S_NAMESPACE }} \
-          --name jenkins-external \
-          --type LoadBalancer \
-          --port 80 \
-          --target-port 8080
-          
-    - name: Verify Jenkins deployment
-      run: |
-        kubectl rollout status deployment/jenkins --namespace ${{ env.K8S_NAMESPACE }}
-        kubectl get pods,svc --namespace ${{ env.K8S_NAMESPACE }}
