@@ -80,3 +80,63 @@ sudo kubectl get nodes
 # Should show nginx pod
 sudo kubectl get all --all-namespaces
 ```
+
+# Jenkins Deployment (Task 4)
+## Helm Installation
+1. Add Jenkins repository:
+
+```bash
+helm repo add jenkins https://charts.jenkins.io
+helm repo update
+```
+2. Create namespace:
+```
+bash
+kubectl create namespace jenkins
+```
+3. Install Jenkins:
+
+```bash
+helm install jenkins jenkins/jenkins -n jenkins
+```
+4. Get admin password:
+
+```bash
+kubectl exec --namespace jenkins -it svc/jenkins -c jenkins -- /bin/cat /var/jenkins_home/secrets/initialAdminPassword
+```
+5. Access Jenkins UI:
+
+```bash
+# On your local machine (new terminal)
+ssh -i your-key.pem -N -L 8080:<k3s_server_private_ip>:8080 ec2-user@<bastion_public_ip>
+```
+6. Then access Jenkins at http://localhost:8080
+
+## CI/CD with GitHub Actions
+The repository includes a pre-configured workflow (.github/workflows/terraform.yml) that:
+- Uses OIDC for secure AWS authentication
+- Automatically runs terraform plan for Pull Requests
+- Executes terraform apply when merging to main branch
+
+Verification Commands
+```bash
+# Cluster nodes
+kubectl get nodes
+
+# All resources
+kubectl get all --all-namespaces
+
+# Jenkins access
+kubectl -n jenkins get pods
+```
+## Cost Optimization Highlights
+- NAT Instance instead of NAT Gateway (saves ~$32/month)
+- t4g.nano instances where possible (Free Tier eligible)
+- Minimal resource footprint while maintaining production readiness
+
+## Security Best Practices
+- Private networking for cluster nodes
+- Restricted SSH access via bastion only
+- IAM roles instead of static credentials
+- Encrypted state storage
+- Least-privilege security group rules
