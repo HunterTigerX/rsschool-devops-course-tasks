@@ -18,11 +18,7 @@ output "k3s_agent_private_ip" {
   value       = aws_instance.k3s_agent.private_ip
 }
 
-output "k3s_cluster_token" {
-  description = "Токен для присоединения к K3s кластеру"
-  value       = random_password.k3s_cluster_token.result
-  sensitive   = true
-}
+
 
 output "kubectl_access_instructions" {
   description = "Инструкции для доступа к кластеру K3s"

@@ -12,6 +12,14 @@ resource "aws_security_group" "bastion" {
     description = "Allow SSH from my IP"
   }
 
+  ingress {
+    from_port   = 30000
+    to_port     = 32767
+    protocol    = "tcp"
+    cidr_blocks = ["${var.my_ip}/32"]
+    description = "Allow NodePort range from my IP"
+  }
+
   egress {
     from_port   = 0
     to_port     = 0
