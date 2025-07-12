@@ -18,10 +18,15 @@ resource "random_password" "k3s_cluster_token" {
 
 resource "aws_instance" "bastion" {
   ami                    = data.aws_ami.amazon_linux_2023_arm.id
-  instance_type          = "t4g.nano"
+  instance_type          = "t4g.small"
   subnet_id              = values(aws_subnet.public)[0].id
   vpc_security_group_ids = [aws_security_group.bastion.id]
   key_name               = var.key_name
+
+  root_block_device {
+    volume_size = 20
+    volume_type = "gp3"
+  }
 
   tags = merge(var.common_tags, {
     Name = "bastion-host"
@@ -31,7 +36,7 @@ resource "aws_instance" "bastion" {
 
 resource "aws_instance" "k3s_server" {
   ami                    = data.aws_ami.amazon_linux_2023_arm.id
-  instance_type          = "t4g.small"
+  instance_type          = "t4g.nano"
   subnet_id              = values(aws_subnet.private)[0].id
   vpc_security_group_ids = [aws_security_group.k3s_server.id]
   key_name               = var.key_name
@@ -48,7 +53,7 @@ resource "aws_instance" "k3s_server" {
 
 resource "aws_instance" "k3s_agent" {
   ami                    = data.aws_ami.amazon_linux_2023_arm.id
-  instance_type          = "t4g.micro"
+  instance_type          = "t4g.nano"
   subnet_id              = values(aws_subnet.private)[1].id
   vpc_security_group_ids = [aws_security_group.k3s_agent.id]
   key_name               = var.key_name
