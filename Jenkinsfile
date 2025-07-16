@@ -130,13 +130,13 @@ pipeline {
                         echo "Using service: $SERVICE_NAME"
                         kubectl get svc $SERVICE_NAME
                         
-                        # Port forward and test
-                        kubectl port-forward svc/$SERVICE_NAME 8080:8080 &
+                        # Port forward and test (use a different local port)
+                        kubectl port-forward svc/$SERVICE_NAME 8888:8080 &
                         PF_PID=$!
                         sleep 10
                         
                         # Test the application
-                        RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080)
+                        RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8888)
                         if [ "$RESPONSE" = "200" ]; then
                             echo "✅ Application is responding correctly"
                         else
@@ -146,7 +146,7 @@ pipeline {
                         fi
                         
                         # Test content
-                        CONTENT=$(curl -s http://localhost:8080)
+                        CONTENT=$(curl -s http://localhost:8888)
                         if [[ "$CONTENT" == *"Hello, World!"* ]]; then
                             echo "✅ Application content verification passed"
                         else
