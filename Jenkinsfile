@@ -125,11 +125,13 @@ pipeline {
                         # Wait for pods to be ready
                         kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=flask-helm-chart --timeout=300s
                         
-                        # Get service details
-                        kubectl get svc flask-helm-chart
+                        # Use the correct service name
+                        SERVICE_NAME="flask-app-flask-helm-chart"
+                        echo "Using service: $SERVICE_NAME"
+                        kubectl get svc $SERVICE_NAME
                         
                         # Port forward and test
-                        kubectl port-forward svc/flask-helm-chart 8080:8080 &
+                        kubectl port-forward svc/$SERVICE_NAME 8080:8080 &
                         PF_PID=$!
                         sleep 10
                         
@@ -139,7 +141,7 @@ pipeline {
                             echo "✅ Application is responding correctly"
                         else
                             echo "❌ Application verification failed with HTTP code: $RESPONSE"
-                            kill $PF_PID
+                            kill $PF_PID 2>/dev/null || true
                             exit 1
                         fi
                         
@@ -149,11 +151,11 @@ pipeline {
                             echo "✅ Application content verification passed"
                         else
                             echo "❌ Application content verification failed"
-                            kill $PF_PID
+                            kill $PF_PID 2>/dev/null || true
                             exit 1
                         fi
                         
-                        kill $PF_PID
+                        kill $PF_PID 2>/dev/null || true
                     '''
                 }
             }
