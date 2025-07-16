@@ -5,7 +5,7 @@ pipeline {
         DOCKER_REGISTRY = 'huntertigerx'
         IMAGE_NAME = 'flask-app'
         IMAGE_TAG = "${BUILD_NUMBER}"
-        KUBECONFIG = '/var/jenkins_home/.kube/config'
+        KUBECONFIG = '/var/lib/jenkins/.kube/config'
         HELM_CHART_PATH = './flask-helm-chart'
         SONAR_PROJECT_KEY = 'flask-app'
     }
@@ -14,6 +14,27 @@ pipeline {
         stage('Checkout') {
             steps {
                 checkout scm
+            }
+        }
+        
+        stage('Setup Kubernetes Config') {
+            steps {
+                echo 'Setting up Kubernetes configuration...'
+                sh '''
+                    mkdir -p /var/lib/jenkins/.kube
+                    if [ ! -f /var/lib/jenkins/.kube/config ]; then
+                        echo "Kubeconfig not found, attempting to copy from K3s server"
+                        # This assumes Jenkins has SSH access to the K3s server
+                        # You may need to adjust this based on your setup
+                        scp -o StrictHostKeyChecking=no -i /var/lib/jenkins/.ssh/id_rsa ec2-user@10.0.3.200:/etc/rancher/k3s/k3s.yaml /var/lib/jenkins/.kube/config
+                        # Update server address in the kubeconfig
+                        sed -i 's/127.0.0.1/10.0.3.200/g' /var/lib/jenkins/.kube/config
+                    else
+                        echo "Kubeconfig already exists"
+                    fi
+                    chmod 600 /var/lib/jenkins/.kube/config
+                '''
+                echo 'Kubernetes configuration set up successfully'
             }
         }
         
