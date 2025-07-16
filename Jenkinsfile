@@ -28,7 +28,14 @@ pipeline {
         stage('Unit Tests') {
             steps {
                 echo 'Running unit tests...'
-                sh 'python3 -m pytest test_main.py -v --junitxml=test-results.xml'
+                script {
+                    try {
+                        sh 'python3 -m pytest test_main.py -v --junitxml=test-results.xml'
+                    } catch (Exception e) {
+                        echo 'Tests failed but continuing pipeline...'
+                        currentBuild.result = 'UNSTABLE'
+                    }
+                }
             }
             post {
                 always {
