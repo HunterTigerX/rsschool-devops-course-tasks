@@ -1,0 +1,20 @@
+name: Trigger Jenkins Pipeline
+
+on:
+  push:
+    branches: [ main, task_6 ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  trigger-jenkins:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Trigger Jenkins Pipeline
+      run: |
+        curl -X POST \
+          -H "Authorization: Bearer ${{ secrets.JENKINS_TOKEN }}" \
+          "${{ secrets.JENKINS_URL }}/job/flask-app-pipeline/build"
+      env:
+        JENKINS_URL: ${{ secrets.JENKINS_URL }}
+        JENKINS_TOKEN: ${{ secrets.JENKINS_TOKEN }}

@@ -20,6 +20,22 @@ resource "aws_security_group" "bastion" {
     description = "Allow NodePort range from my IP"
   }
 
+  ingress {
+    from_port   = 8080
+    to_port     = 8080
+    protocol    = "tcp"
+    cidr_blocks = ["${var.my_ip}/32"]
+    description = "Jenkins Allow port 8080 from my IP"
+  }
+
+  ingress {
+    from_port   = 9000
+    to_port     = 9000
+    protocol    = "tcp"
+    cidr_blocks = ["${var.my_ip}/32"]
+    description = "SonarQube Allow port 9000 from my IP"
+  }
+
   egress {
     from_port   = 0
     to_port     = 0
