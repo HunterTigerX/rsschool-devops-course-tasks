@@ -15,11 +15,11 @@ COPY README_FLASK.md .
 COPY main.py .
 
 # Make port 5000 available to the world outside this container
-EXPOSE 8080
+EXPOSE 5000
 
 # Define environment variable
 ENV FLASK_APP=main.py
 
 # Run app.py when the container launches
-CMD ["flask", "run", "--host=0.0.0.0", "--port=8080"]
+CMD ["flask", "run", "--host=0.0.0.0", "--port=5000"]
 

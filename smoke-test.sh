@@ -5,7 +5,7 @@
 
 set -e
 
-APP_URL=${1:-"http://localhost:8080"}
+APP_URL=${1:-"http://localhost:8888"}
 TIMEOUT=${2:-30}
 
 echo "🧪 Starting smoke tests for Flask application"

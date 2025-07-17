@@ -8,6 +8,7 @@ pipeline {
         KUBECONFIG = '/var/lib/jenkins/.kube/config'
         HELM_CHART_PATH = './flask-helm-chart'
         SONAR_PROJECT_KEY = 'flask-app'
+        SONAR_HOST_URL = 'http://localhost:9000'
     }
     
     stages {
@@ -51,7 +52,7 @@ pipeline {
                 echo 'Running unit tests...'
                 script {
                     try {
-                        sh 'python3 -m pytest test_main.py -v --junitxml=test-results.xml'
+                        sh 'python3 -m pytest test_main.py -v --junitxml=test-results.xml --cov=. --cov-report=xml'
                     } catch (Exception e) {
                         echo 'Tests failed but continuing pipeline...'
                         currentBuild.result = 'UNSTABLE'
@@ -67,14 +68,27 @@ pipeline {
         
         stage('SonarQube Analysis') {
             steps {
-                echo 'SonarQube analysis temporarily skipped'
-                // TODO: Fix SonarQube connectivity issues
+                echo 'Running SonarQube analysis...'
+                withSonarQubeEnv('SonarQube') {
+                    sh '''
+                        sonar-scanner \
+                        -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
+                        -Dsonar.projectName=${SONAR_PROJECT_KEY} \
+                        -Dsonar.sources=. \
+                        -Dsonar.python.coverage.reportPaths=coverage.xml \
+                        -Dsonar.python.xunit.reportPath=test-results.xml \
+                        -Dsonar.exclusions=flask-helm-chart/**
+                    '''
+                }
             }
         }
         
         stage('Quality Gate') {
             steps {
-                echo 'Quality gate skipped - SonarQube analysis disabled'
+                echo 'Checking SonarQube quality gate...'
+                timeout(time: 1, unit: 'MINUTES') {
+                    waitForQualityGate abortPipeline: true
+                }
             }
         }
         
@@ -179,7 +193,7 @@ pipeline {
                     <p><strong>Docker Image:</strong> ${DOCKER_REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}</p>
                     <p>Application has been successfully deployed to Kubernetes cluster.</p>
                 """,
-                to: "${env.CHANGE_AUTHOR_EMAIL}",
+                to: "${env.CHANGE_AUTHOR_EMAIL ?: 'huntertigerx@gmail.com'}",
                 mimeType: 'text/html'
             )
         }
@@ -195,7 +209,7 @@ pipeline {
                     <p><strong>Failed Stage:</strong> ${env.STAGE_NAME}</p>
                     <p>Please check the build logs for more details.</p>
                 """,
-                to: "${env.CHANGE_AUTHOR_EMAIL}",
+                to: "${env.CHANGE_AUTHOR_EMAIL ?: 'huntertigerx@gmail.com'}",
                 mimeType: 'text/html'
             )
         }
