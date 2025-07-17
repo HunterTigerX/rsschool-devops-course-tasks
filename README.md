@@ -140,6 +140,9 @@ kubectl -n jenkins get pods
 - IAM roles instead of static credentials
 - Encrypted state storage
 - Least-privilege security group rules
+- SonarQube security scanning in CI/CD pipeline
+- Docker image vulnerability scanning
+- Kubernetes RBAC and security contexts
 
 # Task 5: Flask Application Deployment with Helm
 
@@ -364,3 +367,288 @@ helm uninstall flask-app
 # Remove Docker image (optional)
 docker rmi huntertigerx/flask-app:latest
 ```
+
+# Task 6: Jenkins CI/CD Pipeline
+
+## Overview
+This task implements a complete CI/CD pipeline using Jenkins to build, test, and deploy a Flask application to a Kubernetes cluster. The pipeline includes security scanning with SonarQube and automated notifications.
+
+## Pipeline Architecture
+```
+GitHub → Jenkins → SonarQube → Docker Hub → K8s Cluster
+   ↓         ↓         ↓           ↓           ↓
+ Webhook   Build    Security    Registry   Deployment
+          & Test    Scan        Push       with Helm
+```
+
+## Pipeline Stages
+
+### 1. **Checkout**
+- Pulls the latest code from the repository
+
+### 2. **Build Application**
+- Installs Python dependencies
+- Prepares the Flask application
+
+### 3. **Unit Tests**
+- Runs pytest unit tests
+- Generates JUnit XML reports
+- Tests application functionality
+
+### 4. **SonarQube Analysis**
+- Performs static code analysis
+- Checks for security vulnerabilities
+- Evaluates code quality metrics
+
+### 5. **Quality Gate**
+- Waits for SonarQube quality gate results
+- Fails pipeline if quality standards not met
+
+### 6. **Build Docker Image**
+- Creates Docker image with build number tag
+- Uses multi-stage build for optimization
+
+### 7. **Push Docker Image**
+- Pushes image to Docker Hub registry
+- Tags with both build number and 'latest'
+
+### 8. **Deploy to K8s**
+- Uses Helm to deploy/upgrade application
+- Updates image tag to latest build
+- Waits for deployment completion
+
+### 9. **Application Verification**
+- Verifies pods are running
+- Tests HTTP endpoint accessibility
+- Validates application response content
+
+## Prerequisites
+
+### Jenkins Setup
+1. **Required Plugins:**
+   - Pipeline
+   - Docker Pipeline
+   - SonarQube Scanner
+   - Email Extension
+   - Kubernetes CLI
+
+2. **Credentials Configuration:**
+   ```
+   - docker-hub-credentials: Docker Hub username/password
+   - sonar-auth-token: SonarQube authentication token
+   ```
+
+3. **Tool Configuration:**
+   - SonarQube Scanner installation
+   - Docker installation on Jenkins agent
+   - kubectl configured with cluster access
+
+### SonarQube Setup
+1. Install SonarQube server
+2. Create project with key: `flask-app`
+3. Generate authentication token
+4. Configure webhook to Jenkins (optional)
+
+## File Structure
+```
+├── Jenkinsfile                 # Pipeline definition
+├── main.py                     # Flask application
+├── test_main.py               # Unit tests
+├── requirements.txt           # Python dependencies
+├── Dockerfile                 # Container definition
+├── sonar-project.properties   # SonarQube configuration
+├── flask-helm-chart/          # Helm chart
+└── TASK_6_README.md          # This documentation
+```
+
+## Jenkins Configuration
+
+### 1. Create Pipeline Job
+```bash
+# In Jenkins UI:
+1. New Item → Pipeline
+2. Name: flask-app-pipeline
+3. Pipeline → Definition: Pipeline script from SCM
+4. SCM: Git
+5. Repository URL: <your-repo-url>
+6. Script Path: Jenkinsfile
+```
+
+### 2. Configure Webhooks
+```bash
+# GitHub webhook URL:
+http://<jenkins-url>/github-webhook/
+
+# Trigger events:
+- Push events
+- Pull request events
+```
+
+### 3. Environment Variables
+```bash
+# Set in Jenkins job configuration:
+DOCKER_REGISTRY=huntertigerx
+SONAR_HOST_URL=http://sonarqube:9000
+```
+
+## Pipeline Execution
+
+### Manual Trigger
+```bash
+# From Jenkins UI:
+1. Go to flask-app-pipeline
+2. Click "Build Now"
+3. Monitor build progress
+```
+
+### Automatic Trigger
+- Pipeline triggers automatically on git push
+- Webhook sends notification to Jenkins
+- Pipeline starts within seconds
+
+## Verification Commands
+
+### Check Pipeline Status
+```bash
+# View build logs
+curl -u admin:token http://jenkins:8080/job/flask-app-pipeline/lastBuild/consoleText
+
+# Check build status
+curl -u admin:token http://jenkins:8080/job/flask-app-pipeline/lastBuild/api/json
+```
+
+### Verify Deployment
+```bash
+# Check pods
+kubectl get pods -l app.kubernetes.io/name=flask-helm-chart
+
+# Check service
+kubectl get svc flask-helm-chart
+
+# Test application
+kubectl port-forward svc/flask-helm-chart 8080:8080 &
+curl http://localhost:8080
+```
+
+## Notification System
+
+### Email Notifications
+- **Success**: Sent to commit author on successful deployment
+- **Failure**: Sent to commit author on pipeline failure
+- **Content**: Build details, Docker image info, deployment status
+
+### Notification Configuration
+```groovy
+emailext (
+    subject: "Pipeline Status: ${env.JOB_NAME}",
+    body: "Build ${env.BUILD_NUMBER} completed",
+    to: "${env.CHANGE_AUTHOR_EMAIL}"
+)
+```
+
+## Security Features
+
+### SonarQube Integration
+- Static code analysis
+- Security vulnerability detection
+- Code quality metrics
+- Quality gate enforcement
+
+### Docker Security
+- Non-root user in container
+- Minimal base image (python:3.9-slim)
+- No sensitive data in image layers
+
+### Kubernetes Security
+- Service account with minimal permissions
+- Network policies (if configured)
+- Resource limits and requests
+
+## Troubleshooting
+
+### Common Issues
+
+1. **Docker Build Fails**
+   ```bash
+   # Check Docker daemon
+   sudo systemctl status docker
+   
+   # Verify Jenkins user permissions
+   sudo usermod -aG docker jenkins
+   ```
+
+2. **SonarQube Connection Issues**
+   ```bash
+   # Test connectivity
+   curl -u token: http://sonarqube:9000/api/system/status
+   
+   # Check authentication
+   curl -u admin:admin http://sonarqube:9000/api/authentication/validate
+   ```
+
+3. **Kubernetes Deployment Fails**
+   ```bash
+   # Check kubeconfig
+   kubectl config current-context
+   
+   # Verify cluster connectivity
+   kubectl cluster-info
+   
+   # Check Helm installation
+   helm version
+   ```
+
+### Debug Commands
+```bash
+# View pipeline logs
+kubectl logs -f deployment/jenkins
+
+# Check SonarQube logs
+docker logs sonarqube
+
+# Verify Docker registry access
+docker pull huntertigerx/flask-app:latest
+```
+
+## Performance Optimization
+
+### Pipeline Optimization
+- Parallel stage execution where possible
+- Docker layer caching
+- Artifact caching between builds
+
+### Resource Management
+- Jenkins agent resource limits
+- Kubernetes resource quotas
+- Docker image size optimization
+
+## Monitoring and Metrics
+
+### Jenkins Metrics
+- Build success rate
+- Average build duration
+- Queue time analysis
+
+### Application Metrics
+- Deployment frequency
+- Lead time for changes
+- Mean time to recovery
+
+## Cleanup
+```bash
+# Remove Helm deployment
+helm uninstall flask-app
+
+# Clean Jenkins workspace
+# (Handled automatically by pipeline)
+
+# Remove Docker images
+docker rmi huntertigerx/flask-app:latest
+```
+
+## Next Steps
+1. Add integration tests
+2. Implement blue-green deployment
+3. Add monitoring and alerting
+4. Set up staging environment
+5. Implement automated rollback

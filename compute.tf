@@ -18,15 +18,10 @@ resource "random_password" "k3s_cluster_token" {
 
 resource "aws_instance" "bastion" {
   ami                    = data.aws_ami.amazon_linux_2023_arm.id
-  instance_type          = "t4g.small"
+  instance_type          = "t4g.medium"
   subnet_id              = values(aws_subnet.public)[0].id
   vpc_security_group_ids = [aws_security_group.bastion.id]
   key_name               = var.key_name
-
-  root_block_device {
-    volume_size = 20
-    volume_type = "gp3"
-  }
 
   tags = merge(var.common_tags, {
     Name = "bastion-host"
