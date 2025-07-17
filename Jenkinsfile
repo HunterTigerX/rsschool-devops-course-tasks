@@ -66,20 +66,12 @@ pipeline {
             }
         }
         
+
         stage('SonarQube Analysis') {
             steps {
                 echo 'Running SonarQube analysis...'
-                withSonarQubeEnv('SonarQube') {
-                    sh 'echo "PATH inside SonarQube stage: $PATH"'
-                    sh '''
-                        sonar-scanner \
-                        -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
-                        -Dsonar.projectName=${SONAR_PROJECT_KEY} \
-                        -Dsonar.sources=. \
-                        -Dsonar.python.coverage.reportPaths=coverage.xml \
-                        -Dsonar.python.xunit.reportPath=test-results.xml \
-                        -Dsonar.exclusions=flask-helm-chart/**
-                    '''
+                withSonarQubeEnv('SonarQubeScanner') {
+                    sh "/var/lib/jenkins/tools/hudson.plugins.sonar.SonarRunnerInstallation/SonarQubeScanner/bin/sonar-scanner -Dsonar.projectKey=flask-app -Dsonar.projectName=flask-app -Dsonar.sources=. -Dsonar.python.coverage.reportPaths=coverage.xml -Dsonar.python.xunit.reportPath=test-results.xml '-Dsonar.exclusions=flask-helm-chart/**'"
                 }
             }
         }
