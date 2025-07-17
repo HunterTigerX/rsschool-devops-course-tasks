@@ -70,6 +70,7 @@ pipeline {
             steps {
                 echo 'Running SonarQube analysis...'
                 withSonarQubeEnv('SonarQube') {
+                    sh 'echo "PATH inside SonarQube stage: $PATH"'
                     sh '''
                         sonar-scanner \
                         -Dsonar.projectKey=${SONAR_PROJECT_KEY} \

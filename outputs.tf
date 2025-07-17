@@ -18,6 +18,10 @@ output "k3s_agent_private_ip" {
   value       = aws_instance.k3s_agent.private_ip
 }
 
+output "bastion_security_group_id" {
+  description = "ID группы безопасности Bastion Host"
+  value       = aws_security_group.bastion.id
+}
 
 
 output "kubectl_access_instructions" {
