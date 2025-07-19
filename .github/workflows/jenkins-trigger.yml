@@ -27,7 +27,8 @@ jobs:
           # Используем полученный crumb для запуска билда.
           # Передаем crumb как отдельный заголовок.
           # Аутентификация через user:token с флагом -u.
-          curl -X POST \
+          # Добавляем -v для подробного вывода и -k для игнорирования ошибок SSL/TLS (если применимо).
+          curl -v -X POST \
             -u "${{ secrets.JENKINS_USER }}:${{ secrets.JENKINS_TOKEN }}" \
             -H "${{ steps.get_crumb.outputs.crumb }}" \
             "${{ secrets.JENKINS_URL }}/job/flask-app-pipeline/build"
