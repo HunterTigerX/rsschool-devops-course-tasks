@@ -2,14 +2,17 @@ pipeline {
     agent any
     
     environment {
-        DOCKER_REGISTRY = 'huntertigerx' 
+        DOCKER_REGISTRY = 'huntertigerx'
         IMAGE_NAME = 'flask-app'
         IMAGE_TAG = "build-${BUILD_NUMBER}"
         HELM_RELEASE_NAME = 'flask-app'
         HELM_CHART_PATH = './flask-helm-chart'
         KUBECONFIG = '/var/lib/jenkins/.kube/config'
-        SONAR_SCANNER_TOOL = 'SonarQubeScanner' // Имя инструмента SonarQube Scanner в Jenkins
-        SONAR_SERVER = 'SonarQube' // Имя SonarQube сервера в Jenkins
+        SONAR_SCANNER_TOOL = 'SonarQubeScanner'
+        SONAR_SERVER = 'SonarQube'
+        // Предполагаем, что главный файл приложения называется main.py
+        // Если он называется app.py, измените на 'app'
+        COVERAGE_MODULE = 'main' 
     }
     
     stages {
@@ -23,14 +26,10 @@ pipeline {
         stage('Setup Kubernetes Config') {
             steps {
                 echo 'Setting up Kubernetes configuration...'
-                // Рекомендуется хранить kubeconfig как 'Secret file' в Jenkins Credentials
-                // и использовать withCredentials для доступа к нему.
-                // Этот шаг оставлен для совместимости, но его стоит улучшить.
                 sh '''
                     mkdir -p $HOME/.kube
                     if [ ! -f "${KUBECONFIG}" ]; then
-                        echo "Kubeconfig not found. Please configure it manually or using credentials."
-                        // Здесь можно добавить логику копирования, если это необходимо
+                        echo "Kubeconfig not found. Please ensure it is configured on the Jenkins agent."
                     else
                         echo "Kubeconfig already exists."
                     fi
@@ -44,7 +43,9 @@ pipeline {
             steps {
                 echo 'Installing dependencies and running tests...'
                 sh 'pip3 install -r requirements.txt'
-                sh 'python3 -m pytest test_main.py --cov=app --cov-report=xml --junitxml=test-results.xml'
+                // ИСПРАВЛЕНИЕ: Указываем конкретный модуль для покрытия (main.py)
+                // Это должно исправить ошибку 'No data was collected'.
+                sh "python3 -m pytest test_main.py --cov=${COVERAGE_MODULE} --cov-report=xml --junitxml=test-results.xml"
             }
             post {
                 always {
@@ -64,7 +65,7 @@ pipeline {
                         -Dsonar.sources=. \
                         -Dsonar.python.coverage.reportPaths=coverage.xml \
                         -Dsonar.python.xunit.reportPath=test-results.xml \
-                        -Dsonar.exclusions=flask-helm-chart/**,**/__pycache__/**,*.pyc,*.db
+                        -Dsonar.exclusions=flask-helm-chart/**,**/__pycache__/**,*.pyc,*.db,venv/**
                     """
                 }
             }
@@ -73,8 +74,10 @@ pipeline {
         stage('Quality Gate') {
             steps {
                 echo 'Checking SonarQube quality gate...'
-                // УВЕЛИЧЕННЫЙ ТАЙМАУТ: Увеличиваем до 5 минут, чтобы дать SonarQube время на обработку
-                timeout(time: 5, unit: 'MINUTES') {
+                // ИСПРАВЛЕНИЕ: Радикально увеличиваем таймаут до 20 минут.
+                // Это необходимо из-за низкой производительности SonarQube на инстансе t4g.medium.
+                // В реальных проектах лучше использовать вебхуки.
+                timeout(time: 20, unit: 'MINUTES') {
                     waitForQualityGate abortPipeline: true
                 }
             }
@@ -82,7 +85,8 @@ pipeline {
         
         stage('Build and Push Docker Image') {
             when {
-                expression { return !env.BRANCH_NAME.startsWith('PR-') } // Не выполнять для Pull Request
+                // Не выполнять для Pull Request, чтобы не засорять Docker Hub
+                expression { return !env.BRANCH_NAME.startsWith('PR-') } 
             }
             steps {
                 script {
@@ -100,7 +104,7 @@ pipeline {
         
         stage('Deploy to K8s with Helm') {
             when {
-                expression { return !env.BRANCH_NAME.startsWith('PR-') } // Не выполнять для Pull Request
+                expression { return !env.BRANCH_NAME.startsWith('PR-') }
             }
             steps {
                 script {
@@ -119,14 +123,15 @@ pipeline {
         
         stage('Application Verification') {
             when {
-                expression { return !env.BRANCH_NAME.startsWith('PR-') } // Не выполнять для Pull Request
+                expression { return !env.BRANCH_NAME.startsWith('PR-') }
             }
             steps {
                 script {
                     echo 'Verifying application deployment...'
+                    // Даем приложению немного времени на запуск после --wait
+                    sleep 20 
                     sh '''
-                        # Даем приложению немного времени на запуск после --wait
-                        sleep 15
+                        set +e # Не прерывать скрипт при ошибках
                         
                         # Динамическое получение имени сервиса
                         SERVICE_NAME=$(kubectl get svc -l app.kubernetes.io/instance=${HELM_RELEASE_NAME} -o jsonpath='{.items[0].metadata.name}')
@@ -139,17 +144,24 @@ pipeline {
                         # Проброс порта и проверка
                         kubectl port-forward svc/$SERVICE_NAME 8888:80 &
                         PF_PID=$!
-                        sleep 5
+                        sleep 10
                         
                         RESPONSE_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8888)
+                        
                         kill $PF_PID
+                        wait $PF_PID 2>/dev/null
                         
                         if [ "$RESPONSE_CODE" = "200" ]; then
                             echo "✅ Application verification successful (HTTP 200 OK)"
                         else
                             echo "❌ Application verification failed with HTTP code: $RESPONSE_CODE"
+                            # Выводим логи пода для отладки
+                            POD_NAME=$(kubectl get pods -l app.kubernetes.io/instance=${HELM_RELEASE_NAME} -o jsonpath='{.items[0].metadata.name}')
+                            echo "Logs from pod ${POD_NAME}:"
+                            kubectl logs $POD_NAME
                             exit 1
                         fi
+                        set -e
                     '''
                 }
             }
