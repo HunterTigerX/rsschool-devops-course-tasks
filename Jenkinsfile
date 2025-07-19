@@ -76,6 +76,9 @@ pipeline {
         stage('Quality Gate') {
             steps {
                 echo 'Checking SonarQube quality gate...'
+                // ИСПРАВЛЕНИЕ: Увеличиваем таймаут до 45 минут.
+                // Это временная мера для компенсации медленной работы сервера SonarQube.
+                // После оптимизации сервера (см. инструкции) это значение можно будет уменьшить.
                 timeout(time: 45, unit: 'MINUTES') {
                     waitForQualityGate abortPipeline: true
                 }
@@ -84,8 +87,9 @@ pipeline {
 
         stage('Build and Push Docker Image') {
             when {
+                // ИСПРАВЛЕНИЕ: Если BRANCH_NAME null, используем 'main' по умолчанию.
                 expression {
-                    def branchName = env.BRANCH_NAME ?: 'main' 
+                    def branchName = env.BRANCH_NAME ?: 'main' // Устанавливаем 'main', если BRANCH_NAME null
                     return !branchName.startsWith('PR-')
                 }
             }
@@ -104,8 +108,9 @@ pipeline {
 
         stage('Deploy to K8s with Helm') {
             when {
+                // ИСПРАВЛЕНИЕ: Если BRANCH_NAME null, используем 'main' по умолчанию.
                 expression {
-                    def branchName = env.BRANCH_NAME ?: 'main' 
+                    def branchName = env.BRANCH_NAME ?: 'main' // Устанавливаем 'main', если BRANCH_NAME null
                     return !branchName.startsWith('PR-')
                 }
             }
@@ -117,7 +122,7 @@ pipeline {
                         --set image.repository=${DOCKER_REGISTRY}/${IMAGE_NAME} \\
                         --set image.tag=${IMAGE_TAG} \\
                         --namespace default \\
-                        --wait --timeout 5m0s
+                        --wait --timeout 10m0s # Увеличиваем таймаут Helm
                     """
                     echo 'Deployment completed successfully.'
                 }
@@ -126,8 +131,9 @@ pipeline {
 
         stage('Application Verification') {
             when {
+                // ИСПРАВЛЕНИЕ: Если BRANCH_NAME null, используем 'main' по умолчанию.
                 expression {
-                    def branchName = env.BRANCH_NAME ?: 'main' 
+                    def branchName = env.BRANCH_NAME ?: 'main' // Устанавливаем 'main', если BRANCH_NAME null
                     return !branchName.startsWith('PR-')
                 }
             }
@@ -144,7 +150,7 @@ pipeline {
                         fi
                         echo "Found service: $SERVICE_NAME"
                         
-                        kubectl port-forward svc/$SERVICE_NAME 8888:80 &
+                        kubectl port-forward svc/$SERVICE_NAME 8888:5000 &
                         PF_PID=$!
                         sleep 10
                         RESPONSE_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8888)
