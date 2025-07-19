@@ -10,8 +10,6 @@ pipeline {
         KUBECONFIG = '/var/lib/jenkins/.kube/config'
         SONAR_SCANNER_TOOL = 'SonarQubeScanner'
         SONAR_SERVER = 'SonarQube'
-        // Предполагаем, что главный файл приложения называется main.py
-        // Если он называется app.py, измените на 'app'
         COVERAGE_MODULE = 'main' 
     }
     
@@ -43,8 +41,6 @@ pipeline {
             steps {
                 echo 'Installing dependencies and running tests...'
                 sh 'pip3 install -r requirements.txt'
-                // ИСПРАВЛЕНИЕ: Указываем конкретный модуль для покрытия (main.py)
-                // Это должно исправить ошибку 'No data was collected'.
                 sh "python3 -m pytest test_main.py --cov=${COVERAGE_MODULE} --cov-report=xml --junitxml=test-results.xml"
             }
             post {
@@ -55,8 +51,17 @@ pipeline {
         }
 
         stage('SonarQube Analysis') {
+            // ИСПРАВЛЕНИЕ: Добавляем опцию retry, чтобы Jenkins мог перезапустить этот шаг в случае сбоя.
+            options {
+                retry(1)
+            }
+            environment {
+                // КЛЮЧЕВОЕ ИСПРАВЛЕНИЕ: Ограничиваем память (heap size) для Java-процесса Sonar Scanner.
+                // Это должно предотвратить "зависание" всей системы.
+                SONAR_SCANNER_OPTS = "-Xmx512m"
+            }
             steps {
-                echo 'Running SonarQube analysis...'
+                echo "Running SonarQube analysis with memory limit: ${SONAR_SCANNER_OPTS}"
                 withSonarQubeEnv(SONAR_SERVER) { 
                     sh """
                         ${tool(SONAR_SCANNER_TOOL)}/bin/sonar-scanner \
@@ -74,9 +79,7 @@ pipeline {
         stage('Quality Gate') {
             steps {
                 echo 'Checking SonarQube quality gate...'
-                // ИСПРАВЛЕНИЕ: Радикально увеличиваем таймаут до 20 минут.
-                // Это необходимо из-за низкой производительности SonarQube на инстансе t4g.medium.
-                // В реальных проектах лучше использовать вебхуки.
+                // Оставляем большой таймаут, так как анализ все равно будет медленным
                 timeout(time: 20, unit: 'MINUTES') {
                     waitForQualityGate abortPipeline: true
                 }
@@ -85,13 +88,11 @@ pipeline {
         
         stage('Build and Push Docker Image') {
             when {
-                // Не выполнять для Pull Request, чтобы не засорять Docker Hub
                 expression { return !env.BRANCH_NAME.startsWith('PR-') } 
             }
             steps {
                 script {
                     echo "Building Docker image for ARM64 architecture..."
-                    // Убедитесь, что ваш Dockerfile использует базовый образ для aarch64/arm64
                     docker.withRegistry('https://index.docker.io/v1/', 'docker-hub-credentials') {
                         def customImage = docker.build("${DOCKER_REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}", "--platform linux/arm64 .")
                         customImage.push()
@@ -128,12 +129,9 @@ pipeline {
             steps {
                 script {
                     echo 'Verifying application deployment...'
-                    // Даем приложению немного времени на запуск после --wait
                     sleep 20 
                     sh '''
-                        set +e # Не прерывать скрипт при ошибках
-                        
-                        # Динамическое получение имени сервиса
+                        set +e
                         SERVICE_NAME=$(kubectl get svc -l app.kubernetes.io/instance=${HELM_RELEASE_NAME} -o jsonpath='{.items[0].metadata.name}')
                         if [ -z "$SERVICE_NAME" ]; then
                             echo "❌ Could not find the service for release ${HELM_RELEASE_NAME}"
@@ -141,13 +139,10 @@ pipeline {
                         fi
                         echo "Found service: $SERVICE_NAME"
                         
-                        # Проброс порта и проверка
                         kubectl port-forward svc/$SERVICE_NAME 8888:80 &
                         PF_PID=$!
                         sleep 10
-                        
                         RESPONSE_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8888)
-                        
                         kill $PF_PID
                         wait $PF_PID 2>/dev/null
                         
@@ -155,7 +150,6 @@ pipeline {
                             echo "✅ Application verification successful (HTTP 200 OK)"
                         else
                             echo "❌ Application verification failed with HTTP code: $RESPONSE_CODE"
-                            # Выводим логи пода для отладки
                             POD_NAME=$(kubectl get pods -l app.kubernetes.io/instance=${HELM_RELEASE_NAME} -o jsonpath='{.items[0].metadata.name}')
                             echo "Logs from pod ${POD_NAME}:"
                             kubectl logs $POD_NAME
