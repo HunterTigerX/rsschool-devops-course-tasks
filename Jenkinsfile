@@ -51,13 +51,10 @@ pipeline {
         }
 
         stage('SonarQube Analysis') {
-            // ИСПРАВЛЕНИЕ: Добавляем опцию retry, чтобы Jenkins мог перезапустить этот шаг в случае сбоя.
             options {
                 retry(1)
             }
             environment {
-                // КЛЮЧЕВОЕ ИСПРАВЛЕНИЕ: Ограничиваем память (heap size) для Java-процесса Sonar Scanner.
-                // Это должно предотвратить "зависание" всей системы.
                 SONAR_SCANNER_OPTS = "-Xmx512m"
             }
             steps {
@@ -79,8 +76,10 @@ pipeline {
         stage('Quality Gate') {
             steps {
                 echo 'Checking SonarQube quality gate...'
-                // Оставляем большой таймаут, так как анализ все равно будет медленным
-                timeout(time: 20, unit: 'MINUTES') {
+                // ИСПРАВЛЕНИЕ: Увеличиваем таймаут до 45 минут.
+                // Это временная мера для компенсации медленной работы сервера SonarQube.
+                // После оптимизации сервера (см. инструкции) это значение можно будет уменьшить.
+                timeout(time: 45, unit: 'MINUTES') {
                     waitForQualityGate abortPipeline: true
                 }
             }
