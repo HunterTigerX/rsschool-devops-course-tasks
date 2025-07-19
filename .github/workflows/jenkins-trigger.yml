@@ -10,11 +10,23 @@ jobs:
   trigger-jenkins:
     runs-on: ubuntu-latest
     steps:
-    - name: Trigger Jenkins Pipeline
-      run: |
-        curl -X POST \
-          -H "Authorization: Bearer ${{ secrets.JENKINS_TOKEN }}" \
-          "${{ secrets.JENKINS_URL }}/job/flask-app-pipeline/build"
-      env:
-        JENKINS_URL: ${{ secrets.JENKINS_URL }}
-        JENKINS_TOKEN: ${{ secrets.JENKINS_TOKEN }}
+      - name: Get Jenkins Crumb
+        id: get_crumb
+        run: |
+          # Получаем crumb от Jenkins
+          CRUMB=$(curl -s -u "${{ secrets.JENKINS_USER }}:${{ secrets.JENKINS_TOKEN }}" "${{ secrets.JENKINS_URL }}/crumbIssuer/api/xml?xpath=concat(//crumbRequestField,\":\",//crumb)")
+          echo "crumb=$CRUMB" >> $GITHUB_OUTPUT
+        env:
+          JENKINS_USER: ${{ secrets.JENKINS_USER }} # Вам нужно будет добавить этот секрет в GitHub
+          JENKINS_TOKEN: ${{ secrets.JENKINS_TOKEN }}
+
+      - name: Trigger Jenkins Pipeline
+        run: |
+          # Используем полученный crumb для запуска билда
+          curl -X POST \
+            -H "Authorization: Bearer ${{ secrets.JENKINS_TOKEN }}" \
+            -H "${{ steps.get_crumb.outputs.crumb }}" \
+            "${{ secrets.JENKINS_URL }}/job/flask-app-pipeline/build"
+        env:
+          JENKINS_URL: ${{ secrets.JENKINS_URL }}
+          JENKINS_TOKEN: ${{ secrets.JENKINS_TOKEN }}
