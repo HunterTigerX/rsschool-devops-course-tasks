@@ -1,6 +1,6 @@
 pipeline {
     agent any
-    
+
     environment {
         DOCKER_REGISTRY = 'huntertigerx'
         IMAGE_NAME = 'flask-app'
@@ -10,9 +10,9 @@ pipeline {
         KUBECONFIG = '/var/lib/jenkins/.kube/config'
         SONAR_SCANNER_TOOL = 'SonarQubeScanner'
         SONAR_SERVER = 'SonarQube'
-        COVERAGE_MODULE = 'main' 
+        COVERAGE_MODULE = 'main'
     }
-    
+
     stages {
         stage('Checkout') {
             steps {
@@ -20,7 +20,7 @@ pipeline {
                 checkout scm
             }
         }
-        
+
         stage('Setup Kubernetes Config') {
             steps {
                 echo 'Setting up Kubernetes configuration...'
@@ -36,7 +36,7 @@ pipeline {
                 echo 'Kubernetes configuration set up successfully.'
             }
         }
-        
+
         stage('Build & Test') {
             steps {
                 echo 'Installing dependencies and running tests...'
@@ -59,35 +59,35 @@ pipeline {
             }
             steps {
                 echo "Running SonarQube analysis with memory limit: ${SONAR_SCANNER_OPTS}"
-                withSonarQubeEnv(SONAR_SERVER) { 
+                withSonarQubeEnv(SONAR_SERVER) {
                     sh """
-                        ${tool(SONAR_SCANNER_TOOL)}/bin/sonar-scanner \
-                        -Dsonar.projectKey=flask-app \
-                        -Dsonar.projectName=flask-app \
-                        -Dsonar.sources=. \
-                        -Dsonar.python.coverage.reportPaths=coverage.xml \
-                        -Dsonar.python.xunit.reportPath=test-results.xml \
+                        ${tool(SONAR_SCANNER_TOOL)}/bin/sonar-scanner \\
+                        -Dsonar.projectKey=flask-app \\
+                        -Dsonar.projectName=flask-app \\
+                        -Dsonar.sources=. \\
+                        -Dsonar.python.coverage.reportPaths=coverage.xml \\
+                        -Dsonar.python.xunit.reportPath=test-results.xml \\
                         -Dsonar.exclusions=flask-helm-chart/**,**/__pycache__/**,*.pyc,*.db,venv/**
                     """
                 }
             }
         }
-        
+
         stage('Quality Gate') {
             steps {
                 echo 'Checking SonarQube quality gate...'
-                // ИСПРАВЛЕНИЕ: Увеличиваем таймаут до 45 минут.
-                // Это временная мера для компенсации медленной работы сервера SonarQube.
-                // После оптимизации сервера (см. инструкции) это значение можно будет уменьшить.
                 timeout(time: 45, unit: 'MINUTES') {
                     waitForQualityGate abortPipeline: true
                 }
             }
         }
-        
+
         stage('Build and Push Docker Image') {
             when {
-                expression { return !env.BRANCH_NAME.startsWith('PR-') } 
+                expression {
+                    def branchName = env.BRANCH_NAME ?: 'main' 
+                    return !branchName.startsWith('PR-')
+                }
             }
             steps {
                 script {
@@ -101,34 +101,40 @@ pipeline {
                 }
             }
         }
-        
+
         stage('Deploy to K8s with Helm') {
             when {
-                expression { return !env.BRANCH_NAME.startsWith('PR-') }
+                expression {
+                    def branchName = env.BRANCH_NAME ?: 'main' 
+                    return !branchName.startsWith('PR-')
+                }
             }
             steps {
                 script {
                     echo 'Deploying to Kubernetes with Helm...'
                     sh """
-                        helm upgrade --install ${HELM_RELEASE_NAME} ${HELM_CHART_PATH} \
-                        --set image.repository=${DOCKER_REGISTRY}/${IMAGE_NAME} \
-                        --set image.tag=${IMAGE_TAG} \
-                        --namespace default \
+                        helm upgrade --install ${HELM_RELEASE_NAME} ${HELM_CHART_PATH} \\
+                        --set image.repository=${DOCKER_REGISTRY}/${IMAGE_NAME} \\
+                        --set image.tag=${IMAGE_TAG} \\
+                        --namespace default \\
                         --wait --timeout 5m0s
                     """
                     echo 'Deployment completed successfully.'
                 }
             }
         }
-        
+
         stage('Application Verification') {
             when {
-                expression { return !env.BRANCH_NAME.startsWith('PR-') }
+                expression {
+                    def branchName = env.BRANCH_NAME ?: 'main' 
+                    return !branchName.startsWith('PR-')
+                }
             }
             steps {
                 script {
                     echo 'Verifying application deployment...'
-                    sleep 20 
+                    sleep 20
                     sh '''
                         set +e
                         SERVICE_NAME=$(kubectl get svc -l app.kubernetes.io/instance=${HELM_RELEASE_NAME} -o jsonpath='{.items[0].metadata.name}')
@@ -160,7 +166,7 @@ pipeline {
             }
         }
     }
-    
+
     post {
         always {
             echo 'Pipeline execution finished.'
