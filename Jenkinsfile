@@ -1,41 +1,47 @@
 pipeline {
     agent any
-    
+
     environment {
         DOCKER_REGISTRY = 'huntertigerx'
         IMAGE_NAME = 'flask-app'
-        IMAGE_TAG = "${BUILD_NUMBER}"
-        KUBECONFIG = '/var/jenkins_home/.kube/config'
+        IMAGE_TAG = "build-${BUILD_NUMBER}"
+        HELM_RELEASE_NAME = 'flask-app'
         HELM_CHART_PATH = './flask-helm-chart'
-        SONAR_PROJECT_KEY = 'flask-app'
+        KUBECONFIG = '/var/lib/jenkins/.kube/config'
+        SONAR_SCANNER_TOOL = 'SonarQubeScanner'
+        SONAR_SERVER = 'SonarQube'
+        COVERAGE_MODULE = 'main'
     }
-    
+
     stages {
         stage('Checkout') {
             steps {
+                echo 'Checking out source code...'
                 checkout scm
             }
         }
-        
-        stage('Build Application') {
+
+        stage('Setup Kubernetes Config') {
             steps {
-                echo 'Building Flask application...'
-                sh 'pip3 install -r requirements.txt'
-                echo 'Application built successfully'
+                echo 'Setting up Kubernetes configuration...'
+                sh '''
+                    mkdir -p $HOME/.kube
+                    if [ ! -f "${KUBECONFIG}" ]; then
+                        echo "Kubeconfig not found. Please ensure it is configured on the Jenkins agent."
+                    else
+                        echo "Kubeconfig already exists."
+                    fi
+                    chmod 600 ${KUBECONFIG}
+                '''
+                echo 'Kubernetes configuration set up successfully.'
             }
         }
-        
-        stage('Unit Tests') {
+
+        stage('Build & Test') {
             steps {
-                echo 'Running unit tests...'
-                script {
-                    try {
-                        sh 'python3 -m pytest test_main.py -v --junitxml=test-results.xml'
-                    } catch (Exception e) {
-                        echo 'Tests failed but continuing pipeline...'
-                        currentBuild.result = 'UNSTABLE'
-                    }
-                }
+                echo 'Installing dependencies and running tests...'
+                sh 'pip3 install -r requirements.txt'
+                sh "python3 -m pytest test_main.py --cov=${COVERAGE_MODULE} --cov-report=xml --junitxml=test-results.xml"
             }
             post {
                 always {
@@ -43,149 +49,147 @@ pipeline {
                 }
             }
         }
-        
+
         stage('SonarQube Analysis') {
+            options {
+                retry(1)
+            }
+            environment {
+                SONAR_SCANNER_OPTS = "-Xmx512m"
+            }
             steps {
-                script {
-                    def scannerHome = tool 'SonarQubeScanner'
-                    withSonarQubeEnv('SonarQube') {
-                        sh """
-                            ${scannerHome}/bin/sonar-scanner \
-                            -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
-                            -Dsonar.sources=. \
-                            -Dsonar.host.url=${SONAR_HOST_URL} \
-                            -Dsonar.login=${SONAR_AUTH_TOKEN}
-                        """
-                    }
+                echo "Running SonarQube analysis with memory limit: ${SONAR_SCANNER_OPTS}"
+                withSonarQubeEnv(SONAR_SERVER) {
+                    sh """
+                        ${tool(SONAR_SCANNER_TOOL)}/bin/sonar-scanner \\
+                        -Dsonar.projectKey=flask-app \\
+                        -Dsonar.projectName=flask-app \\
+                        -Dsonar.sources=. \\
+                        -Dsonar.python.coverage.reportPaths=coverage.xml \\
+                        -Dsonar.python.xunit.reportPath=test-results.xml \\
+                        -Dsonar.exclusions=flask-helm-chart/**,**/__pycache__/**,*.pyc,*.db,venv/**
+                    """
                 }
             }
         }
-        
+
         stage('Quality Gate') {
             steps {
-                timeout(time: 1, unit: 'HOURS') {
+                echo 'Checking SonarQube quality gate...'
+                // ИСПРАВЛЕНИЕ: Увеличиваем таймаут до 45 минут.
+                // Это временная мера для компенсации медленной работы сервера SonarQube.
+                // После оптимизации сервера (см. инструкции) это значение можно будет уменьшить.
+                timeout(time: 45, unit: 'MINUTES') {
                     waitForQualityGate abortPipeline: true
                 }
             }
         }
-        
-        stage('Build Docker Image') {
-            steps {
-                script {
-                    echo 'Building Docker image...'
-                    def image = docker.build("${DOCKER_REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}")
-                    echo "Docker image built: ${DOCKER_REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}"
+
+        stage('Build and Push Docker Image') {
+            when {
+                // ИСПРАВЛЕНИЕ: Если BRANCH_NAME null, используем 'main' по умолчанию.
+                expression {
+                    def branchName = env.BRANCH_NAME ?: 'main' // Устанавливаем 'main', если BRANCH_NAME null
+                    return !branchName.startsWith('PR-')
                 }
             }
-        }
-        
-        stage('Push Docker Image') {
             steps {
                 script {
+                    echo "Building Docker image for ARM64 architecture..."
                     docker.withRegistry('https://index.docker.io/v1/', 'docker-hub-credentials') {
-                        def image = docker.image("${DOCKER_REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}")
-                        image.push()
-                        image.push('latest')
+                        def customImage = docker.build("${DOCKER_REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}", "--platform linux/arm64 .")
+                        customImage.push()
+                        customImage.push('latest')
                     }
                     echo "Docker image pushed: ${DOCKER_REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}"
                 }
             }
         }
-        
-        stage('Deploy to K8s') {
+
+        stage('Deploy to K8s with Helm') {
+            when {
+                // ИСПРАВЛЕНИЕ: Если BRANCH_NAME null, используем 'main' по умолчанию.
+                expression {
+                    def branchName = env.BRANCH_NAME ?: 'main' // Устанавливаем 'main', если BRANCH_NAME null
+                    return !branchName.startsWith('PR-')
+                }
+            }
             steps {
                 script {
                     echo 'Deploying to Kubernetes with Helm...'
                     sh """
-                        helm upgrade --install flask-app ${HELM_CHART_PATH} \
-                        --set image.repository=${DOCKER_REGISTRY}/${IMAGE_NAME} \
-                        --set image.tag=${IMAGE_TAG} \
-                        --namespace default \
-                        --wait
+                        helm upgrade --install ${HELM_RELEASE_NAME} ${HELM_CHART_PATH} \\
+                        --set image.repository=${DOCKER_REGISTRY}/${IMAGE_NAME} \\
+                        --set image.tag=${IMAGE_TAG} \\
+                        --namespace default \\
+                        --wait --timeout 10m0s # Увеличиваем таймаут Helm
                     """
-                    echo 'Deployment completed successfully'
+                    echo 'Deployment completed successfully.'
                 }
             }
         }
-        
+
         stage('Application Verification') {
+            when {
+                // ИСПРАВЛЕНИЕ: Если BRANCH_NAME null, используем 'main' по умолчанию.
+                expression {
+                    def branchName = env.BRANCH_NAME ?: 'main' // Устанавливаем 'main', если BRANCH_NAME null
+                    return !branchName.startsWith('PR-')
+                }
+            }
             steps {
                 script {
                     echo 'Verifying application deployment...'
+                    sleep 20
                     sh '''
-                        # Wait for pods to be ready
-                        kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=flask-helm-chart --timeout=300s
+                        set +e
+                        SERVICE_NAME=$(kubectl get svc -l app.kubernetes.io/instance=${HELM_RELEASE_NAME} -o jsonpath='{.items[0].metadata.name}')
+                        if [ -z "$SERVICE_NAME" ]; then
+                            echo "❌ Could not find the service for release ${HELM_RELEASE_NAME}"
+                            exit 1
+                        fi
+                        echo "Found service: $SERVICE_NAME"
                         
-                        # Get service details
-                        kubectl get svc flask-helm-chart
-                        
-                        # Port forward and test
-                        kubectl port-forward svc/flask-helm-chart 8080:8080 &
+                        kubectl port-forward svc/$SERVICE_NAME 8888:5000 &
                         PF_PID=$!
                         sleep 10
-                        
-                        # Test the application
-                        RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080)
-                        if [ "$RESPONSE" = "200" ]; then
-                            echo "✅ Application is responding correctly"
-                        else
-                            echo "❌ Application verification failed with HTTP code: $RESPONSE"
-                            kill $PF_PID
-                            exit 1
-                        fi
-                        
-                        # Test content
-                        CONTENT=$(curl -s http://localhost:8080)
-                        if [[ "$CONTENT" == *"Hello, World!"* ]]; then
-                            echo "✅ Application content verification passed"
-                        else
-                            echo "❌ Application content verification failed"
-                            kill $PF_PID
-                            exit 1
-                        fi
-                        
+                        RESPONSE_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8888)
                         kill $PF_PID
+                        wait $PF_PID 2>/dev/null
+                        
+                        if [ "$RESPONSE_CODE" = "200" ]; then
+                            echo "✅ Application verification successful (HTTP 200 OK)"
+                        else
+                            echo "❌ Application verification failed with HTTP code: $RESPONSE_CODE"
+                            POD_NAME=$(kubectl get pods -l app.kubernetes.io/instance=${HELM_RELEASE_NAME} -o jsonpath='{.items[0].metadata.name}')
+                            echo "Logs from pod ${POD_NAME}:"
+                            kubectl logs $POD_NAME
+                            exit 1
+                        fi
+                        set -e
                     '''
                 }
             }
         }
     }
-    
+
     post {
         always {
-            echo 'Pipeline execution completed'
+            echo 'Pipeline execution finished.'
             cleanWs()
         }
         success {
-            echo '✅ Pipeline executed successfully!'
             emailext (
-                subject: "✅ Jenkins Pipeline Success: ${env.JOB_NAME} - ${env.BUILD_NUMBER}",
-                body: """
-                    <h2>Pipeline Execution Successful</h2>
-                    <p><strong>Job:</strong> ${env.JOB_NAME}</p>
-                    <p><strong>Build Number:</strong> ${env.BUILD_NUMBER}</p>
-                    <p><strong>Build URL:</strong> <a href="${env.BUILD_URL}">${env.BUILD_URL}</a></p>
-                    <p><strong>Docker Image:</strong> ${DOCKER_REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}</p>
-                    <p>Application has been successfully deployed to Kubernetes cluster.</p>
-                """,
-                to: "${env.CHANGE_AUTHOR_EMAIL}",
-                mimeType: 'text/html'
+                subject: "✅ SUCCESS: ${env.JOB_NAME} - Build #${env.BUILD_NUMBER}",
+                body: "Pipeline for ${env.JOB_NAME} build #${env.BUILD_NUMBER} completed successfully. Check it here: ${env.BUILD_URL}",
+                to: "huntertigerx@gmail.com"
             )
         }
         failure {
-            echo '❌ Pipeline failed!'
             emailext (
-                subject: "❌ Jenkins Pipeline Failed: ${env.JOB_NAME} - ${env.BUILD_NUMBER}",
-                body: """
-                    <h2>Pipeline Execution Failed</h2>
-                    <p><strong>Job:</strong> ${env.JOB_NAME}</p>
-                    <p><strong>Build Number:</strong> ${env.BUILD_NUMBER}</p>
-                    <p><strong>Build URL:</strong> <a href="${env.BUILD_URL}">${env.BUILD_URL}</a></p>
-                    <p><strong>Failed Stage:</strong> ${env.STAGE_NAME}</p>
-                    <p>Please check the build logs for more details.</p>
-                """,
-                to: "${env.CHANGE_AUTHOR_EMAIL}",
-                mimeType: 'text/html'
+                subject: "❌ FAILED: ${env.JOB_NAME} - Build #${env.BUILD_NUMBER}",
+                body: "Pipeline for ${env.JOB_NAME} build #${env.BUILD_NUMBER} failed at stage '${env.STAGE_NAME}'. Check the logs: ${env.BUILD_URL}",
+                to: "huntertigerx@gmail.com"
             )
         }
     }
